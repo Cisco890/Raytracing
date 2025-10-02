@@ -1,7 +1,7 @@
 import pygame
 import numpy as np
 from gl import Renderer
-from figures import Sphere, Cube, Disk, Triangle, Plane, Capsule
+from figures import Sphere, Cube, Disk, Triangle, Plane, Capsule, Torus
 from material import Material, OPAQUE, REFLECTIVE, TRANSPARENT
 from lights import DirectionalLight, AmbientLight, PointLight
 from camera import Camera
@@ -11,13 +11,13 @@ WIDTH, HEIGHT = 400, 400
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption('Raytracing - Cápsula Reflectiva')
+    pygame.display.set_caption('Raytracing - Cápsulas y Donas')
 
     renderer = Renderer(screen)
     renderer.camera = Camera()
     
-    # Configurar recursión para reflexiones
-    renderer.maxRecursionDepth = 3
+    # Configurar recursión para reflexiones y transparencias
+    renderer.maxRecursionDepth = 5
     
     # Sin fondo (negro)
     renderer.glClearColor(0.0, 0.0, 0.0)
@@ -25,10 +25,21 @@ def main():
     # No usar textura de fondo (comentado para crear cuarto cerrado)
     # renderer.envMap = None
 
-    # Materiales
-    # Material reflectivo para la cápsula (sin textura)
-    material_capsula = Material(diffuse=[0.8, 0.8, 0.8], spec=128, ks=0.9, matType=REFLECTIVE)
-    print("Material reflectivo creado para la cápsula")
+    # Materiales para las figuras
+    
+    # Materiales reflectivos
+    material_plateado = Material(diffuse=[0.9, 0.9, 0.9], spec=256, ks=0.95, matType=REFLECTIVE)
+    material_dorado = Material(diffuse=[1.0, 0.84, 0.0], spec=256, ks=0.9, matType=REFLECTIVE)
+    
+    # Materiales opacos
+    material_turquesa = Material(diffuse=[0.25, 0.88, 0.82], spec=32, ks=0.3, matType=OPAQUE)
+    material_lila = Material(diffuse=[0.8, 0.6, 0.8], spec=32, ks=0.3, matType=OPAQUE)
+    
+    # Materiales transparentes
+    material_rojo_transparente = Material(diffuse=[0.8, 0.2, 0.2], spec=64, ks=0.5, matType=TRANSPARENT, ior=1.5)
+    material_naranja_transparente = Material(diffuse=[1.0, 0.6, 0.2], spec=64, ks=0.5, matType=TRANSPARENT, ior=1.4)
+    
+    print("Materiales creados para todas las figuras")
 
     # Materiales para el cuarto
     # Material para techo y suelo (blanca.bmp)
@@ -72,11 +83,28 @@ def main():
     pared_derecha = Plane(position=[4.0, 0.0, -5.0], normal=[-1, 0, 0], material=material_paredes)
     renderer.scene.append(pared_derecha)
 
-    # Crear la cápsula reflectiva en el centro
+    # Crear las figuras según especificaciones
     
-    # CÁPSULA - Posicionada en el centro del cuarto, reflectiva y sin textura
-    capsula = Capsule(position=[0.0, 0.0, -5.0], radius=1.0, height=2.0, material=material_capsula)
-    renderer.scene.append(capsula)
+    # GRUPO 1: Cápsula plateada reflectiva y dona dorada reflectiva (izquierda)
+    capsula_plateada = Capsule(position=[-2.5, -1.0, -5.0], radius=0.6, height=1.5, material=material_plateado)
+    renderer.scene.append(capsula_plateada)
+    
+    dona_dorada = Torus(position=[-2.5, 1.2, -5.0], major_radius=0.8, minor_radius=0.3, material=material_dorado)
+    renderer.scene.append(dona_dorada)
+    
+    # GRUPO 2: Cápsula turquesa opaca y dona lila opaca (centro)
+    capsula_turquesa = Capsule(position=[0.0, -1.0, -5.0], radius=0.6, height=1.5, material=material_turquesa)
+    renderer.scene.append(capsula_turquesa)
+    
+    dona_lila = Torus(position=[0.0, 1.2, -5.0], major_radius=0.8, minor_radius=0.3, material=material_lila)
+    renderer.scene.append(dona_lila)
+    
+    # GRUPO 3: Cápsula roja transparente y dona naranja transparente (derecha)
+    capsula_roja = Capsule(position=[2.5, -1.0, -5.0], radius=0.6, height=1.5, material=material_rojo_transparente)
+    renderer.scene.append(capsula_roja)
+    
+    dona_naranja = Torus(position=[2.5, 1.2, -5.0], major_radius=0.8, minor_radius=0.3, material=material_naranja_transparente)
+    renderer.scene.append(dona_naranja)
 
     # Luces
     # Luz puntual principal - Como una bombilla en el techo del cuarto
@@ -100,12 +128,12 @@ def main():
     renderer.lights.append(luz_indirecta)
 
     print("Iniciando renderizado...")
-    print("Cuarto cerrado creado con:")
-    print("- Suelo y techo con textura blanca.bmp")
-    print("- 3 paredes con textura quarzo.bmp")
-    print("- Una cápsula reflectiva en el centro (sin textura)")
-    print("- Luz puntual interior para iluminación realista")
-    print("- Luz ambiental y direccional para detalles")
+    print("Escena creada con:")
+    print("- Cuarto cerrado (suelo, techo y 3 paredes con texturas)")
+    print("- GRUPO 1 (izquierda): Capsula plateada reflectiva + Dona dorada reflectiva")
+    print("- GRUPO 2 (centro): Capsula turquesa opaca + Dona lila opaca")  
+    print("- GRUPO 3 (derecha): Capsula roja transparente + Dona naranja transparente")
+    print("- Iluminación interior realista")
 
     # Renderizar
     renderer.glRenderRaytracing()

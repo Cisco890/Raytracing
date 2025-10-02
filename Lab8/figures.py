@@ -645,4 +645,179 @@ class Capsule(Shape):
 		
 		return [u, v]
 
+
+class Torus(Shape):
+	def __init__(self, position, major_radius, minor_radius, material):
+		super().__init__(position, material)
+		self.major_radius = major_radius  # Radio mayor (desde el centro hasta el centro del tubo)
+		self.minor_radius = minor_radius  # Radio menor (radio del tubo)
+		self.type = "Torus"
+	
+	def ray_intersect(self, orig, dir):
+		# Asegurarse de trabajar con numpy arrays
+		orig = np.array(orig, dtype=float)
+		dir = np.array(dir, dtype=float)
+		
+		# Normalizar la dirección del rayo
+		dir_length = np.linalg.norm(dir)
+		if dir_length == 0:
+			return None
+		dir = dir / dir_length
+		
+		epsilon = 1e-6
+		
+		# Trasladar el rayo al sistema de coordenadas del toro
+		ro = orig - np.array(self.position)
+		
+		# Coeficientes para la ecuación cuártica del toro
+		R = self.major_radius
+		r = self.minor_radius
+		
+		# Precálculos
+		dot_ro_ro = np.dot(ro, ro)
+		dot_rd_rd = np.dot(dir, dir)
+		dot_ro_rd = np.dot(ro, dir)
+		
+		k = dot_ro_ro - R*R - r*r
+		
+		# Coeficientes de la ecuación cuártica: at^4 + bt^3 + ct^2 + dt + e = 0
+		a = dot_rd_rd * dot_rd_rd
+		
+		b = 4.0 * dot_rd_rd * dot_ro_rd
+		
+		c = 2.0 * dot_rd_rd * k + 4.0 * dot_ro_rd * dot_ro_rd + 4.0 * R*R * dir[1]*dir[1]
+		
+		d = 4.0 * k * dot_ro_rd + 8.0 * R*R * ro[1] * dir[1]
+		
+		e = k*k + 4.0 * R*R * (ro[1]*ro[1] - r*r)
+		
+		# Resolver la ecuación cuártica usando el método de Ferrari
+		roots = self._solve_quartic(a, b, c, d, e)
+		
+		# Encontrar la intersección más cercana que esté adelante del origen
+		min_t = float('inf')
+		closest_hit = None
+		
+		for t in roots:
+			if t > epsilon and t < min_t:
+				hit_point = orig + dir * t
+				normal = self._calculate_torus_normal(hit_point)
+				
+				if normal is not None:
+					texCoords = self._calculate_uv_torus(hit_point, normal)
+					min_t = t
+					closest_hit = Intercept(hit_point, normal, t, self, dir, texCoords)
+		
+		return closest_hit
+	
+	def _solve_quartic(self, a, b, c, d, e):
+		"""Resuelve una ecuación cuártica usando el método numérico de Newton-Raphson"""
+		roots = []
+		
+		# Normalizar coeficientes
+		if abs(a) < 1e-10:
+			return []
+		
+		b /= a
+		c /= a
+		d /= a
+		e /= a
+		
+		# Método simplificado: buscar raíces usando aproximaciones numéricas
+		# Evaluamos la función en varios puntos para encontrar cambios de signo
+		def f(t):
+			return t*t*t*t + b*t*t*t + c*t*t + d*t + e
+		
+		def df(t):
+			return 4*t*t*t + 3*b*t*t + 2*c*t + d
+		
+		# Buscar raíces en un rango razonable
+		test_points = np.linspace(-10, 10, 1000)
+		
+		for i in range(len(test_points) - 1):
+			t1, t2 = test_points[i], test_points[i + 1]
+			f1, f2 = f(t1), f(t2)
+			
+			# Si hay cambio de signo, hay una raíz
+			if f1 * f2 < 0:
+				# Usar método de Newton-Raphson para refinar la raíz
+				t = (t1 + t2) / 2
+				for _ in range(10):  # Máximo 10 iteraciones
+					ft = f(t)
+					dft = df(t)
+					if abs(dft) < 1e-10:
+						break
+					t_new = t - ft / dft
+					if abs(t_new - t) < 1e-8:
+						break
+					t = t_new
+				
+				if abs(f(t)) < 1e-6:  # Verificar que es una raíz válida
+					roots.append(t)
+		
+		return roots
+	
+	def _calculate_torus_normal(self, hit_point):
+		"""Calcula la normal en un punto del toro"""
+		# Trasladar el punto al sistema de coordenadas del toro
+		p = hit_point - np.array(self.position)
+		
+		R = self.major_radius
+		r = self.minor_radius
+		
+		# Calcular la normal usando la fórmula del gradiente
+		x, y, z = p[0], p[1], p[2]
+		
+		# Distancia desde el eje Y hasta el punto proyectado en el plano XZ
+		rho = np.sqrt(x*x + z*z)
+		
+		if rho < 1e-10:
+			return None  # Punto demasiado cerca del eje central
+		
+		# Componentes de la normal
+		nx = 4.0 * x * (rho - R)
+		ny = 4.0 * y * (rho - R) / rho if rho > 1e-10 else 0
+		nz = 4.0 * z * (rho - R)
+		
+		normal = np.array([nx, ny, nz])
+		normal_length = np.linalg.norm(normal)
+		
+		if normal_length < 1e-10:
+			return None
+		
+		return normal / normal_length
+	
+	def _calculate_uv_torus(self, hit_point, normal):
+		"""Calcula las coordenadas UV para el mapeo de texturas en el toro"""
+		# Trasladar el punto al sistema de coordenadas del toro
+		p = hit_point - np.array(self.position)
+		
+		x, y, z = p[0], p[1], p[2]
+		
+		# Coordenada U: ángulo alrededor del eje principal (eje Y)
+		u = 0.5 + atan2(z, x) / (2 * pi)
+		
+		# Coordenada V: ángulo alrededor del tubo menor
+		# Primero encontrar el punto en el círculo mayor más cercano
+		rho = np.sqrt(x*x + z*z)
+		if rho < 1e-10:
+			v = 0.5
+		else:
+			# Vector desde el punto en el círculo mayor hasta el punto de impacto
+			circle_point = np.array([x * self.major_radius / rho, 0, z * self.major_radius / rho])
+			to_hit = p - circle_point
+			
+			# Ángulo en el plano perpendicular al círculo mayor
+			v = 0.5 + atan2(y, np.linalg.norm([to_hit[0], to_hit[2]]) - self.major_radius) / (2 * pi)
+		
+		# Asegurar que las coordenadas UV estén en el rango [0, 1]
+		u = u % 1.0
+		v = v % 1.0
+		if u < 0:
+			u += 1.0
+		if v < 0:
+			v += 1.0
+		
+		return [u, v]
+
 	
